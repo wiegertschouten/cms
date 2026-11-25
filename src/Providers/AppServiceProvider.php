@@ -7,6 +7,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Session;
@@ -24,12 +25,15 @@ use Statamic\Facades\User;
 use Statamic\Fields\FieldsetRecursionStack;
 use Statamic\Http\Middleware\PingOutpost;
 use Statamic\Icons\IconManager;
+use Statamic\Jobs\DeletePartialFormSubmissions;
+use Statamic\Jobs\DeleteSpamFormSubmissions;
 use Statamic\Jobs\HandleEntrySchedule;
 use Statamic\Licensing\Radio;
 use Statamic\Notifications\ElevatedSessionVerificationCode;
 use Statamic\Sites\Sites;
 use Statamic\Stache\Query\RevisionQueryBuilder;
 use Statamic\Statamic;
+use Statamic\Tags\Structure as StructureTag;
 use Statamic\Tokens\Handlers\LivePreview;
 use Statamic\View\Scaffolding\TemplateGenerator;
 
@@ -55,6 +59,12 @@ class AppServiceProvider extends ServiceProvider
         if (class_exists(\Laravel\Octane\Events\RequestReceived::class)) {
             Event::listen(\Laravel\Octane\Events\RequestReceived::class, fn () => Ffmpeg::clearBinaryCache());
         }
+
+        Event::listen(JobProcessing::class, function () {
+            if (Statamic::isWorker()) {
+                StructureTag::forgetTrees();
+            }
+        });
 
         $this->app[\Illuminate\Contracts\Http\Kernel::class]
             ->pushMiddleware(\Statamic\Http\Middleware\PoweredByHeader::class)
@@ -153,6 +163,9 @@ class AppServiceProvider extends ServiceProvider
         if (config('statamic.system.handle_scheduled_entries')) {
             $this->app->make(Schedule::class)->job(HandleEntrySchedule::class)->everyMinute();
         }
+
+        $this->app->make(Schedule::class)->job(DeletePartialFormSubmissions::class)->daily();
+        $this->app->make(Schedule::class)->job(DeleteSpamFormSubmissions::class)->daily();
 
         $this->app->make(Schedule::class)
             ->call(fn () => app(Radio::class)->ping())

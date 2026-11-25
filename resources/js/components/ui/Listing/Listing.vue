@@ -420,7 +420,7 @@ function request() {
             signal: source.signal,
         })
         .then((response) => {
-            setColumns(response.data.meta.columns);
+            if (response.data.meta.columns) setColumns(response.data.meta.columns);
             activeFilterBadges.value = { ...response.data.meta.activeFilterBadges };
             items.value = Object.values(response.data.data);
             meta.value = response.data.meta;
@@ -747,7 +747,7 @@ watch(
             activeFilters.value = props.filtersForReordering ? props.filtersForReordering() : {};
             searchQuery.value = null;
             sortColumn.value = 'order';
-            sortDirection.value = 'asc';
+            sortDirection.value = props.sortDirection;
             currentPage.value = 1;
         } else {
             if (stateBeforeReordering.value) {
@@ -873,7 +873,17 @@ autoApplyState();
                 <ui-skeleton class="h-48 w-full" />
             </div>
         </slot>
-        <slot v-if="!initializing" :items="items" :is-column-visible="isColumnVisible" :loading="loading">
+        <slot
+            v-if="!initializing"
+            :items
+            :is-column-visible
+            :loading
+            :show-presets
+            :allow-search
+            :allow-customizing-columns
+            :has-filters
+            :meta
+        >
             <Presets v-if="showPresets" />
             <div v-if="allowSearch || hasFilters || allowCustomizingColumns" class="relative overflow-clip flex items-center gap-2 sm:gap-3 min-h-16 starting-style-transition st-overflow-clip-margin">
                 <div class="flex flex-1 items-center gap-2 sm:gap-3 overflow-x-auto -ms-1 ps-1 py-1">

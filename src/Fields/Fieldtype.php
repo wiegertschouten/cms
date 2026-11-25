@@ -4,6 +4,7 @@ namespace Statamic\Fields;
 
 use Facades\Statamic\Fields\FieldtypeRepository;
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Support\Collection;
 use Statamic\Extend\HasHandle;
 use Statamic\Extend\RegistersItself;
 use Statamic\Facades\Blink;
@@ -11,6 +12,7 @@ use Statamic\Facades\GraphQL;
 use Statamic\Query\Scopes\Filters\Fields\FieldtypeFilter;
 use Statamic\Statamic;
 use Statamic\Support\Str;
+use WeakMap;
 
 use function Statamic\trans as __;
 
@@ -29,6 +31,9 @@ abstract class Fieldtype implements Arrayable
     protected $validatable = true;
     protected $defaultable = true;
     protected $selectable = true;
+    /**
+     * @deprecated Register a FormFieldtype instead.
+     */
     protected $selectableInForms = false;
     protected $relationship = false;
     protected $categories = [];
@@ -38,6 +43,7 @@ abstract class Fieldtype implements Arrayable
     protected $defaultValue;
     protected $configFields = [];
     protected static $extraConfigFields = [];
+    private static ?WeakMap $configDefaults = null;
     protected $icon;
 
     public static function title()
@@ -102,6 +108,9 @@ abstract class Fieldtype implements Arrayable
         return $this->selectable;
     }
 
+    /**
+     * @deprecated Use FormFieldtype::isSelectable() instead.
+     */
     public function selectableInForms(): bool
     {
         if (FieldtypeRepository::selectableInFormIsOverriden($this->handle())) {
@@ -111,11 +120,17 @@ abstract class Fieldtype implements Arrayable
         return $this->selectableInForms;
     }
 
+    /**
+     * @deprecated Use FormFieldtype::makeSelectable() instead.
+     */
     public static function makeSelectableInForms()
     {
         FieldtypeRepository::makeSelectableInForms(self::handle());
     }
 
+    /**
+     * @deprecated Use FormFieldtype::makeUnselectable() instead.
+     */
     public static function makeUnselectableInForms()
     {
         FieldtypeRepository::makeUnselectableInForms(self::handle());
@@ -341,6 +356,30 @@ abstract class Fieldtype implements Arrayable
         return $data;
     }
 
+    /**
+     * A deterministic sample value, used wherever a value is needed for previewing but no real one exists.
+     * For example, form email previews.
+     *
+     * Return the value in its processed (stored) shape. This may run in production, so it must not use Faker.
+     * The field's config is available via `$this->field()`. Return null if the fieldtype doesn't collect a value.
+     */
+    public function previewValue(): mixed
+    {
+        return null;
+    }
+
+    /**
+     * A realistic random sample value, used where Faker is available. For example, fake form submissions.
+     *
+     * Return the value in its processed (stored) shape. This only runs in local environments.
+     * Defaults to `previewValue()`, so override it only when you want more realistic data.
+     * The field's config is available via `$this->field()`.
+     */
+    public function fakeValue(\Faker\Generator $faker): mixed
+    {
+        return $this->previewValue();
+    }
+
     public function preProcessConfig($data)
     {
         return $this->preProcess($data);
@@ -356,6 +395,9 @@ abstract class Fieldtype implements Arrayable
         return $data;
     }
 
+    /**
+     * @deprecated Implement FormFieldtype::view() instead.
+     */
     public function view()
     {
         $language = config('statamic.templates.language', 'antlers');
@@ -378,15 +420,54 @@ abstract class Fieldtype implements Arrayable
         }
 
         $fieldConfig = $this->field->config();
+        $fields = $this->configFields()->all();
 
-        $config = $this->configFields()->all()
-            ->reject(fn ($field, $handle) => array_key_exists($handle, $fieldConfig))
-            ->map->defaultValue()
-            ->merge($fieldConfig);
+        // Most calls ask for a single key, so answer those without building the whole config.
+        if (is_string($key) && $key !== '') {
+            if (array_key_exists($key, $fieldConfig)) {
+                return $fieldConfig[$key] ?? $fallback;
+            }
+
+            return ($fields->has($key) ? self::configDefault($fields, $key) : null) ?? $fallback;
+        }
+
+        $config = [];
+
+        foreach ($fields as $handle => $field) {
+            if (! array_key_exists($handle, $fieldConfig)) {
+                $config[$handle] = self::configDefault($fields, $handle);
+            }
+        }
+
+        $config = array_merge($config, $fieldConfig);
 
         return $key
-            ? ($config->get($key) ?? $fallback)
-            : $config->all();
+            ? ($config[$key] ?? $fallback)
+            : $config;
+    }
+
+    /**
+     * A config field's default value. It's worked out once per config fields
+     * collection, which Blink keeps for the request. Computed defaults are
+     * still resolved on every read.
+     */
+    private static function configDefault(Collection $fields, string $handle)
+    {
+        $field = $fields->get($handle);
+
+        if ($field->hasComputedDefault()) {
+            return $field->defaultValue();
+        }
+
+        self::$configDefaults ??= new WeakMap;
+        $defaults = self::$configDefaults[$fields] ?? [];
+
+        if (! array_key_exists($handle, $defaults)) {
+            $defaults[$handle] = $field->defaultValue();
+            self::$configDefaults[$fields] = $defaults;
+        }
+
+        return $defaults[$handle];
     }
 
     public function preload()

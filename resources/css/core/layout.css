@@ -229,17 +229,26 @@ main.nav-closed {
 
 /* Used for three panel layouts */
 .global-header-nav {
-    --item-padding: calc(var(--spacing) * 4);
     ul {
         display: flex;
+        gap: calc(var(--spacing) * 2);
+        padding: var(--spacing);
     }
     li {
-        padding: 0.75rem var(--item-padding);
         @apply text-xs;
     }
     a {
+        display: block;
         position: relative;
+        padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+        border-radius: var(--radius-md);
         color: var(--color-gray-400);
+
+        &:not(.active):is(:hover, :focus-visible) {
+            background: color-mix(in oklab, var(--color-white) 7%, transparent);
+            color: var(--color-gray-100);
+        }
+
         &.active {
             color: white;
             anchor-name: --active;
@@ -254,17 +263,17 @@ main.nav-closed {
     @supports (anchor-name: --my-anchor) {
         ul:has(.active) {
             &::before {
-                --height-increase: calc(var(--spacing) * 4.5);
                 content: '';
                 position: absolute;
-                width: calc(anchor-size(width) + var(--item-padding) * 1.5);
-                height: calc(anchor-size(height) + var(--height-increase));
+                pointer-events: none;
+                width: anchor-size(width);
+                height: anchor-size(height);
                 background: var(--theme-color-global-header-bg);
-                border-radius: 5px;
+                border-radius: var(--radius-md);
                 border-block-start: 1px solid var(--color-gray-600);
                 position-anchor: --active;
-                left: calc(anchor(left) - var(--item-padding) * 1.5 / 2);
-                top: calc(anchor(top) - var(--height-increase) / 2);
+                left: anchor(left);
+                top: anchor(top);
                 transition-property: top, left;
                 transition-duration: 0.5s;
                 transition-timing-function: cubic-bezier(0.215, 0.610, 0.355, 1);
